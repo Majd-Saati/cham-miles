@@ -4,11 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
-  HeadContent,
-  Scripts,
 } from "@tanstack/react-router";
-
-import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
   return (
@@ -68,49 +64,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Cham Miles - Welcome on Board" },
-      { name: "description", content: "Fly Cham Interface is a web application that displays interactive window elements and content." },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Cham Miles - Welcome on Board" },
-      { property: "og:description", content: "Fly Cham Interface is a web application that displays interactive window elements and content." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Cham Miles - Welcome on Board" },
-      { name: "twitter:description", content: "Fly Cham Interface is a web application that displays interactive window elements and content." },
-      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/UU1Ci1TFD2X7UKM9hDviodEZRTi2/social-images/social-1778096627772-Cham_Miles_Logo-01.webp" },
-      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/UU1Ci1TFD2X7UKM9hDviodEZRTi2/social-images/social-1778096627772-Cham_Miles_Logo-01.webp" },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
-  }),
-  shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
 });
-
-function RootShell({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  );
-}
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
