@@ -119,16 +119,15 @@ export default function SecondLayer({
             if (img) ro.observe(img);
         });
 
-        const scrollRoots = [window];
-        const mainScroll = document.getElementById('app-main-scroll');
-        if (mainScroll) scrollRoots.push(mainScroll);
-
-        scrollRoots.forEach((t) => t.addEventListener('scroll', update, { capture: true, passive: true }));
+        // Do NOT re-measure on scroll. The parent applies a uniform transform
+        // (scale) to the scrim and the slots together, so the hole ratios are
+        // invariant. Re-measuring on every scroll tick produced transient
+        // mismatches between the current scale frame and the freshly-set
+        // holes — that is the flash on the first scroll step.
         window.addEventListener('resize', update);
 
         return () => {
             ro.disconnect();
-            scrollRoots.forEach((t) => t.removeEventListener('scroll', update, true));
             window.removeEventListener('resize', update);
         };
     }, []);
@@ -146,6 +145,11 @@ export default function SecondLayer({
                 aria-hidden="true"
                 style={{
                     background: SCRIM_GRADIENT,
+                    // Hide the scrim until the window cutout holes have been
+                    // measured. Otherwise the full gradient covers FirstLayer
+                    // on first paint, then "pops" once holes appear — that's
+                    // the flash on the very first scroll step.
+                    opacity: activeHoles.length === 3 ? 1 : 0,
                     ...(activeHoles.length === 3
                         ? {
                               WebkitMaskImage: maskRef,
