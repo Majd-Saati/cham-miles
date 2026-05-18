@@ -13,9 +13,9 @@ const SCRIM_GRADIENT =
  * Tweak if the glass sits higher or lower in window.png.
  */
 const OPENING_CX_FRAC = 0.5;
-const OPENING_CY_FRAC = 0.56;
-const OPENING_RX_FRAC = 0.36;
-const OPENING_RY_FRAC = 0.36;
+const OPENING_CY_FRAC = 0.52;
+const OPENING_RX_FRAC = 0.28;
+const OPENING_RY_FRAC = 0.32;
 
 function WindowScrimMask({ id, holes }) {
     return (
@@ -176,7 +176,7 @@ export default function SecondLayer({
                         </h2>
                     </div>
 
-                    <div className="mt-6 md:mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-10 lg:gap-14 items-end">
+                    <div className="mt-6 md:mt-8 grid grid-cols-3 md:grid-cols-3 gap-6 md:gap-10 lg:gap-14 items-end">
                         {[0, 1, 2].map((item) => (
                             <div key={item} className="flex justify-center">
                                 <div

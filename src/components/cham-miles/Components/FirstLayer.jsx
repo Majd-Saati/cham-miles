@@ -4,11 +4,11 @@ import BackgroundLayers from './BackgroundLayers';
 import HeroContent from './HeroContent';
 
 /**
- * Hero layer: wing-over-clouds background with the "Welcome to ChamMiles"
+ * Hero layer: wing-over-clouds background with the "Welcome to Cham Miles"
  * title block. Used as the deepest layer in the scroll-driven sequence;
  * stays visible behind the window mask until the final scene takes over.
  */
-export default function FirstLayer() {
+export default function FirstLayer({ onEnterAnimationComplete, scrollProgress }) {
     const { gradientDelay, gradientDuration, smoothEase } = ANIMATION_CONFIG;
     const gradientEndDelay = gradientDelay + gradientDuration;
     const heroContainerVariants = getHeroContainerVariants(gradientEndDelay);
@@ -25,6 +25,8 @@ export default function FirstLayer() {
                 description={HERO_CONTENT.description}
                 heroContainerVariants={heroContainerVariants}
                 titleVariants={titleVariants}
+                onEnterAnimationComplete={onEnterAnimationComplete}
+                scrollProgress={scrollProgress}
             />
         </section>
     );

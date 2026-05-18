@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { useScroll, useTransform, useSpring, motion, useMotionValueEvent } from 'framer-motion';
 import FirstLayer from './Components/FirstLayer';
 import SecondLayer from './Components/SecondLayer';
@@ -12,6 +12,15 @@ import {
 
 const SAFETY_GRADIENT =
     'linear-gradient(180deg, rgb(0, 83, 117) 0%, rgb(18, 18, 18) 100%)';
+
+/**
+ * Initial zoom of the SecondLayer (window frame) at scroll progress = 0.
+ * Tweak this single value to change how zoomed-in the windows appear before
+ * the user starts scrolling. Must be >= 1 (1 = natural layout, no zoom).
+ */
+export const DEFAULT_INITIAL_ZOOM = 11;
+export const MIN_INITIAL_ZOOM = 1;
+export const MAX_INITIAL_ZOOM = 15;
 
 /**
  * Both layers stacked. SecondLayer starts zoomed in significantly so the
@@ -38,29 +47,32 @@ export default function ChamMilesClient() {
         mass: 0.4,
     });
 
-    // Continuous scroll-driven zoom:
-    //  - SecondLayer (window frame + composed layout) starts massively zoomed
-    //    in (window opening fills the viewport, framing the hero) and shrinks
-    //    smoothly to its natural 1x layout as the user scrolls.
-    //  - FirstLayer (Welcome + wing) translates upward at the same time so
-    //    the headline drifts out the top of the window opening, leaving only
-    //    the sky/wing visible inside the windows by the end.
-    // Clamp progress to [0,1] so spring overshoot never drops scale below 1
-    // (which would shrink the SecondLayer below the viewport and expose
-    // the FirstLayer around its edges).
-    // Finish the zoom at 80% of scroll, then hold scale=1 for the remaining
-    // 20% buffer. Without this hold, the scale animation finishes at the
-    // exact same moment the sticky parent releases, causing a one-frame
-    // flash between "scaled, mid-air" and "sticky releasing, sliding up".
+    // ───── User-tunable initial zoom (focus on the centered middle window) ─────
+    const [initialZoom, setInitialZoom] = useState(DEFAULT_INITIAL_ZOOM);
+    const [originY, setOriginY] = useState(50); // % vertical focal point (middle window)
+    const [originX, setOriginX] = useState(50); // % horizontal focal point
+
+    // Scroll-driven zoom: starts at `initialZoom` and shrinks to 1 by ZOOM_END.
     const ZOOM_END = 0.8;
-    // Single scale value drives BOTH layers together — they live inside the
-    // same scaling wrapper so there is no relative motion between the scrim's
-    // window-mask and the FirstLayer behind it. That removes every possible
-    // handoff seam (the original cause of flashing).
-    const sceneScale = useTransform(smoothProgress, (v) => {
+    const secondLayerScale = useTransform(smoothProgress, (v) => {
         const t = Math.max(0, Math.min(1, v / ZOOM_END));
-        return Math.max(1, 9.5 - t * 8.5);
+        return Math.max(1, initialZoom - t * (initialZoom - 1));
     });
+    // Keep the safety gradient backdrop fully opaque at ALL times. The
+    // sticky parent already paints the same gradient, but a dedicated
+    // always-on layer underneath the scaled SecondLayer guarantees that no
+    // white frame can ever appear during the GPU compositor handoff while
+    // scaling — which was the real cause of the flashing.
+    const safetyBackdropOpacity = 1;
+
+    // Hide FirstLayer once the SecondLayer scrim fully covers the viewport.
+    // Fade completes well BEFORE the unmount threshold (60.37%) so the
+    // unmount happens on an already-invisible element — no visual pop.
+    const firstLayerOpacity = useTransform(
+        smoothProgress,
+        [0, 0.50, 0.55, 1],
+        [1, 1, 0, 0]
+    );
 
     // Shutter is already fully open from the start — no closed-glass beat.
     const shutterHeight = useTransform(smoothProgress, [0, 1], ['0%', '0%']);
@@ -73,7 +85,25 @@ export default function ChamMilesClient() {
     const [debug, setDebug] = useState(false);
     const [rawP, setRawP] = useState(0);
     const [smoothP, setSmoothP] = useState(0);
-    const [scaleVal, setScaleVal] = useState(9.5);
+    const [scaleVal, setScaleVal] = useState(DEFAULT_INITIAL_ZOOM);
+    const [introDone, setIntroDone] = useState(false);
+
+    // Lock page scroll until the FirstLayer hero intro animation finishes.
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        if (introDone) return;
+        const prevHtml = document.documentElement.style.overflow;
+        const prevBody = document.body.style.overflow;
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.documentElement.style.overflow = prevHtml;
+            document.body.style.overflow = prevBody;
+        };
+    }, [introDone]);
+
+    const handleHeroIntroComplete = useCallback(() => setIntroDone(true), []);
+    const [showFirstLayer, setShowFirstLayer] = useState(true);
     const [scrollY, setScrollY] = useState(0);
     const [viewport, setViewport] = useState({ w: 0, h: 0 });
     const [secondRect, setSecondRect] = useState({ w: 0, h: 0, top: 0, left: 0 });
@@ -95,9 +125,22 @@ export default function ChamMilesClient() {
         return () => window.removeEventListener('keydown', onKey);
     }, []);
 
-    useMotionValueEvent(scrollYProgress, 'change', (v) => setRawP(v));
-    useMotionValueEvent(smoothProgress, 'change', (v) => setSmoothP(v));
-    useMotionValueEvent(sceneScale, 'change', (v) => setScaleVal(v));
+    // Only sync motion values into React state when the debug panel is open.
+    // Otherwise every scroll tick re-renders the whole tree (including
+    // FirstLayer), which is what causes the perceived flashing.
+    useMotionValueEvent(scrollYProgress, 'change', (v) => {
+        if (debug) setRawP(v);
+    });
+    useMotionValueEvent(smoothProgress, 'change', (v) => {
+        if (debug) setSmoothP(v);
+    });
+    useMotionValueEvent(secondLayerScale, 'change', (v) => {
+        if (debug) setScaleVal(v);
+    });
+
+    // FirstLayer is always mounted — toggling its mount state caused the
+    // hero ("Welcome to Cham Miles") to flash on/off as the spring oscillated
+    // around the threshold. It stays in the DOM behind the SecondLayer.
 
     useEffect(() => {
         if (!debug) return;
@@ -160,38 +203,42 @@ export default function ChamMilesClient() {
         <div ref={scrollRef} className="relative w-full" style={{ height: '300vh' }}>
             <div
                 className="sticky top-0 h-screen w-full overflow-hidden"
-                style={{ background: SAFETY_GRADIENT }}
             >
-                {/* Single scaling stage. FirstLayer + SecondLayer scale as
-                    one rigid unit — the scrim's window-mask naturally reveals
-                    FirstLayer through the windows at every scale, with zero
-                    relative motion between them. No handoff, no flash. */}
+
+
+                {/* Layer 1: hero (sky + wing + Welcome text) — always visible
+                    through window holes, never re-rendered or unmounted. */}
+                <div className="absolute inset-0 z-0">
+                    <MemoFirstLayer
+                        onEnterAnimationComplete={handleHeroIntroComplete}
+                        scrollProgress={smoothProgress}
+                    />
+                </div>
+
+                {/* Layer 2: zoomed window overlay, scale decreases on scroll */}
+
                 <motion.div
                     ref={secondLayerRef}
                     className="absolute inset-0 will-change-transform"
                     style={{
-                        scale: sceneScale,
-                        transformOrigin: '50% 48%',
+                        scale: secondLayerScale,
+                        transformOrigin: `${originX}% ${originY}%`,
                     }}
                 >
-                    {/* Behind the scrim — only visible through window holes */}
-                    <div className="absolute inset-0 z-0">
-                        <FirstLayer />
-                    </div>
-
-                    {/* Scrim + window frames + headline copy */}
-                    <div className="absolute inset-0 z-10">
-                        <SecondLayer
-                            navLinks={NAV_LINKS}
-                            headerVariants={headerVariants}
-                            headerItemVariants={headerItemVariants}
-                            scrollVariants={scrollVariants}
-                            content={SECOND_LAYER_CONTENT}
-                            shutterHeight={shutterHeight}
-                        />
-                    </div>
+                    <SecondLayer
+                        navLinks={NAV_LINKS}
+                        headerVariants={headerVariants}
+                        headerItemVariants={headerItemVariants}
+                        scrollVariants={scrollVariants}
+                        content={SECOND_LAYER_CONTENT}
+                        shutterHeight={shutterHeight}
+                    />
                 </motion.div>
 
+                {/* Initial-zoom control (always visible, top-left) */}
+      
+
+                {/* Fixed header on top, unaffected by the zoom */}
                 <div className="absolute inset-x-0 top-0 z-50 mx-auto w-full max-w-[1440px] px-6 md:px-12">
                     <HeroHeader
                         navLinks={NAV_LINKS}
@@ -200,40 +247,7 @@ export default function ChamMilesClient() {
                     />
                 </div>
 
-                {debug && (
-                    <div className="pointer-events-auto fixed bottom-4 right-4 z-[9999] w-[290px] rounded-lg bg-black/85 p-3 font-mono text-[11px] leading-tight text-white shadow-2xl backdrop-blur-sm">
-                        <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/20 pb-1">
-                            <span className="font-semibold tracking-wide text-emerald-300">CHAMMILES DEBUG</span>
-                            <button
-                                type="button"
-                                onClick={copySnapshot}
-                                className={`rounded px-2 py-[2px] text-[10px] ${copied ? 'bg-emerald-500 text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                                title="Copy debug snapshot as JSON"
-                            >
-                                {copied ? 'Copied!' : 'Copy'}
-                            </button>
-                        </div>
-                        <Row k="raw progress"     v={`${(rawP * 100).toFixed(2)}%`} warn={rawP < 0 || rawP > 1} />
-                        <Row k="smooth progress"  v={`${(smoothP * 100).toFixed(2)}%`} warn={smoothP < 0 || smoothP > 1} />
-                        <Row k="scale"            v={scaleVal.toFixed(3)} warn={scaleVal < 1} />
-                        <Row k="window scrollY"   v={`${scrollY}px`} />
-                        <Row k="viewport"         v={`${viewport.w}×${viewport.h}`} />
-                        <Row
-                            k="2nd layer box"
-                            v={`${secondRect.w}×${secondRect.h}`}
-                            warn={secondRect.w < viewport.w || secondRect.h < viewport.h}
-                        />
-                        <Row
-                            k="2nd layer top/left"
-                            v={`${secondRect.top},${secondRect.left}`}
-                            warn={secondRect.top > 0 || secondRect.left > 0}
-                        />
-                        <div className="mt-2 border-t border-white/20 pt-1 text-[10px] text-white/60">
-                            warnings highlight when SecondLayer fails to fully cover the viewport
-                            (the cause of edge-flash bugs).
-                        </div>
-                    </div>
-                )}
+ 
             </div>
         </div>
     );
@@ -249,3 +263,7 @@ function Row({ k, v, warn }) {
         </div>
     );
 }
+
+// FirstLayer is purely a function of its props; memoizing prevents it from
+// re-rendering when the parent re-renders due to slider/debug state changes.
+const MemoFirstLayer = memo(FirstLayer);

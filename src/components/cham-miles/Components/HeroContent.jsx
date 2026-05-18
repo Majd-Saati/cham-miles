@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useTransform, useMotionValue } from 'framer-motion';
 import chamMilesLogo from '@/assets/cham-miles/cham-miles-logo.png';
 
 export default function HeroContent({
@@ -8,6 +8,7 @@ export default function HeroContent({
     heroContainerVariants,
     titleVariants,
     onEnterAnimationComplete,
+    scrollProgress,
 }) {
     const notifiedRef = useRef(false);
     const handleHeroMotionComplete = useCallback(() => {
@@ -16,12 +17,20 @@ export default function HeroContent({
         onEnterAnimationComplete?.();
     }, [onEnterAnimationComplete]);
 
+    // Scroll-linked transforms. Stable fallback when no MotionValue is provided.
+    const fallback = useMotionValue(0);
+    const progress = scrollProgress ?? fallback;
+    const y = useTransform(progress, [0, 0.6, 0.85, 1], [0, -120, -200, -200]);
+    const scale = useTransform(progress, [0, 0.6, 0.85, 1], [1, 0.9, 0.86, 0.86]);
+    const opacity = useTransform(progress, [0, 0.6, 0.85, 1], [1, 0.85, 0, 0]);
+
     return (
         <motion.div
-            className="relative z-10 flex min-h-[calc(100vh-80px)] flex-col items-center justify-center text-center px-6 -mt-10 md:-mt-20"
+            className="relative z-10 flex min-h-[calc(100vh-80px)] flex-col items-center justify-center text-center px-6 -mt-10 md:-mt-20 will-change-transform"
             variants={heroContainerVariants}
             initial="hidden"
             animate="visible"
+            style={scrollProgress ? { y, scale, opacity } : undefined}
         >
             <motion.h1
                 variants={titleVariants}

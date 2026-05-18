@@ -7,7 +7,7 @@ export const NAV_LINKS = [
 ];
 
 export const HERO_CONTENT = {
-    title: 'Welcome to ChamMiles',
+    title: 'Welcome to Cham Miles',
     description:
         'Your journey with FlyCham becomes more rewarding from the moment you join with our loyalty program',
     scrollLabel: 'scroll down',

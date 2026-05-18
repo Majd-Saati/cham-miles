@@ -23,7 +23,7 @@ export type EditorContent = {
 
 export const DEFAULT_CONTENT: EditorContent = {
   texts: {
-    welcomeTitle: "Welcome to ChamMiles",
+    welcomeTitle: "Welcome to Cham Miles",
     welcomeSubtitle:
       "Your journey with FlyCham becomes more rewarding from the moment you join with our loyalty program",
     enjoyParagraph:
